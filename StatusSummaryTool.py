@@ -3,8 +3,18 @@ import win32com.client
 import datetime
 import re
 import pandas as pd
+import sys
 
-def filter_emails_by_date_range(emails, START_DATE, END_DATE):
+def check_date_args(start_date_arg, end_date_arg):
+    try:
+        START_DATE = datetime.datetime.strptime(start_date_arg, '%m/%d/%Y')
+        END_DATE = datetime.datetime.strptime(end_date_arg, '%m/%d/%Y')
+    except ValueError:
+        print('Invalid date format. Please enter a date in the format MM/DD/YYYY.')
+        sys.exit(1)
+    return START_DATE, END_DATE
+    
+def date_range_filter(emails, START_DATE, END_DATE):
     """Filters a collection of Outlook emails by a date range.
     
     Args:
@@ -49,7 +59,7 @@ def find_member_reports(text, team_regex_pattern):
     matches = re.finditer(team_regex_pattern, text)
     return matches
 
-def main():        
+def main(start_date_arg, end_date_arg):        
     ##################### User Variables #####################
 
     # user's email 
@@ -66,13 +76,13 @@ def main():
     # Example: 'Group Status'
     EMAIL_SUBJECT = 'Group Status'
 
-    # date dange to search for emails
+    # date range to use to parse emails
     # Example:
+    START_DATE = check_date_args(start_date_arg, end_date_arg)[0]
+    END_DATE = check_date_args(start_date_arg, end_date_arg)[1]
+    '''
     START_DATE = datetime.datetime(2025, 2, 10)
     END_DATE = datetime.datetime(2025, 2, 18)
-    '''
-    START_DATE = ''
-    END_DATE = ''
     '''
     ##########################################################
 
@@ -97,7 +107,7 @@ def main():
         emails_to_parse = emails
     else:
         print('Searching...\n \tEmail: ' + str(USER_EMAIL) + '\n\tFolder: ' + str(EMAIL_FOLDER) + '\n\tSubject: ' + str(EMAIL_SUBJECT) + '\n\tDate Range: ' + START_DATE.strftime('%m/%d/%Y') + ' to ' + END_DATE.strftime('%m/%d/%Y') + '\n')
-        emails_to_parse = filter_emails_by_date_range(emails, START_DATE, END_DATE)
+        emails_to_parse = date_range_filter(emails, START_DATE, END_DATE)
 
     # iterate through narrowed down emails, search if <EMAIL_SUBJECT> (Group Status) is found in each email's subject line, and parse the body of those emails
     for email in emails_to_parse:
@@ -109,6 +119,10 @@ def main():
             team_members_found = [match.group() for match in matches]
             #print(email.subject)
             #print(team_members_found)
+
+            with open("my_text_file.txt", "w", encoding="utf-8") as file:
+                # Write the string to the file.
+                file.write(str(email.htmlbody))
         
             # split the body of each email using each team member's name (in the team_members_found list) as a delimiter creating a list (member_reports) of each report
             member_reports = split_string(email.body.replace('\r', '').replace('\n', '').replace('\t', ' '), team_members_found)
@@ -124,14 +138,13 @@ def main():
                 final_report_df.loc[len(final_report_df)] = [email.ReceivedTime.date(), extracted_subject_date, member, member_reports[team_members_found.index(member)]]
             
 
-    ### clean final dataframe ###
+    ### CLEAN FINAL DATAFRAME ###
     # remove colons from name column
     final_report_df['Name'] = final_report_df['Name'].str.replace(':', '')
-
     final_report_df = final_report_df.sort_values(by=['Sent_Date', 'Name'], ascending=[False, True])
     final_report_df.to_csv('StatusReportSummary_'+str(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M'))+'.csv', index=False)
 
 
 
 if __name__=="__main__":
-    main()
+    main(sys.argv[1], sys.argv[2])
